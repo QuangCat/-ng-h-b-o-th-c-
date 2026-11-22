@@ -475,7 +475,7 @@
     <section id="alarmList" style="display:flex;flex-direction:column;gap:10px;"></section>
   </div>
 
-  <!-- Ringing Overlay -->
+  <!-- Ringing Banner -->
   <div id="ringingBanner" class="ringing-banner">
     <div style="font-size:15px;font-weight:700;color:#cbd5e1;">ĐANG BÁO THỨC</div>
     <div id="ringingClock" class="ringing-clock">07:00 AM</div>
@@ -487,7 +487,7 @@
     const DAY_NAMES = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
     const STORAGE_KEY = "dong_ho_bao_thuc_dien_tu_v1";
 
-    let hour12 = 7;
+    let hour24 = 7;
     let minuteVal = 0;
     let period = "AM";
     let alarms = [];
@@ -593,13 +593,18 @@
       toggleMiniBar();
     });
 
+    function getHour12From24(h24) {
+      return h24 % 12 || 12;
+    }
+
     function renderPicker() {
-      if (hour12 > 12) hour12 = 1;
-      if (hour12 < 1) hour12 = 12;
+      if (hour24 > 23) hour24 = 0;
+      if (hour24 < 0) hour24 = 23;
       if (minuteVal > 59) minuteVal = 0;
       if (minuteVal < 0) minuteVal = 59;
 
-      hourValEl.textContent = pad2(hour12);
+      period = hour24 >= 12 ? "PM" : "AM";
+      hourValEl.textContent = pad2(hour24);
       minValEl.textContent = pad2(minuteVal);
 
       const isAM = period === "AM";
@@ -610,8 +615,11 @@
     }
 
     function setPeriod(nextPeriod) {
-      if (nextPeriod !== "AM" && nextPeriod !== "PM") return;
-      period = nextPeriod;
+      if (nextPeriod === "AM" && hour24 >= 12) {
+        hour24 -= 12;
+      } else if (nextPeriod === "PM" && hour24 < 12) {
+        hour24 += 12;
+      }
       renderPicker();
     }
 
@@ -657,16 +665,12 @@
     }
 
     bindScrub(document.getElementById("hourScrub"), (dir) => {
-      hour12 = hour12 + dir;
-      if (hour12 > 12) hour12 = 1;
-      if (hour12 < 1) hour12 = 12;
+      hour24 = (hour24 + dir + 24) % 24;
       renderPicker();
     });
 
     bindScrub(document.getElementById("minScrub"), (dir) => {
-      minuteVal = minuteVal + dir;
-      if (minuteVal > 59) minuteVal = 0;
-      if (minuteVal < 0) minuteVal = 59;
+      minuteVal = (minuteVal + dir + 60) % 60;
       renderPicker();
     });
 
@@ -702,7 +706,9 @@
     }
 
     function formatAlarmTime(a) {
-      return `${pad2(a.hour12)}:${pad2(a.minute)} ${a.period}`;
+      const h24 = typeof a.hour24 === "number" ? a.hour24 : to24Hour(a.hour12, a.period);
+      const ap = h24 >= 12 ? "PM" : "AM";
+      return `${pad2(h24)}:${pad2(a.minute)} ${ap}`;
     }
 
     function formatRepeatText(jsDays) {
@@ -788,12 +794,14 @@
     addAlarmBtn.addEventListener("click", () => {
       stopPreview();
       const jsDays = activeDayUi.map(uiIndexToJsDay);
+      const currentH12 = getHour12From24(hour24);
+      const currentPeriod = hour24 >= 12 ? "PM" : "AM";
       const newAlarm = {
         id: Date.now().toString(),
-        hour12,
+        hour12: currentH12,
         minute: minuteVal,
-        period,
-        hour24: to24Hour(hour12, period),
+        period: currentPeriod,
+        hour24: hour24,
         days: jsDays,
         label: labelInput.value.trim(),
         ring: Number(ringSelect.value) || 0,
@@ -857,7 +865,7 @@
       if (!activeRingingId && triggerKey !== lastTriggeredKey) {
         const matched = alarms.find((a) => {
           if (!a.enabled) return false;
-          const aH24 = to24Hour(a.hour12, a.period);
+          const aH24 = typeof a.hour24 === "number" ? a.hour24 : to24Hour(a.hour12, a.period);
           if (aH24 !== h24 || a.minute !== m) return false;
           if (!a.days || a.days.length === 0) return true;
           return a.days.includes(now.getDay());
