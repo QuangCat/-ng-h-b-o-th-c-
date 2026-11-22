@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Đồng Hồ Báo Thức ( Điện Tử)</title>
+  <style>
+    :root {
+      --bg-grad: linear-gradient(155deg, #090e1c 0%, #111b36 52%, #080d1a 100%);
+      --glass: rgba(18, 28, 54, 0.72);
+      --glass-soft: rgba(255, 255, 255, 0.06);
+      --border-thick: 3px solid #38bdf8;
+      --border-glow: 0 0 18px rgba(56, 189, 248, 0.35), inset 0 0 12px rgba(56, 189, 248, 0.14);
+      --border-subtle: 2px solid rgba(125, 211, 252, 0.42);
+      --text-main: #f8fafc;
+      --text-dim: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #22d3ee;
+      --danger: #fb7185;
+      --ok: #34d399;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: var(--bg-grad);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .app {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 12px 12px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Mini Clock Bar */
+    .mini-bar {
+      background: var(--glass);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: var(--border-thick);
+      box-shadow: var(--border-glow);
+      border-radius: 16px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .mini-bar.collapsed .mini-detail {
+      display: none;
+    }
+
+    .mini-time {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      color: var(--accent-2);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .mini-detail {
+      font-size: 12px;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .btn-mini {
+      background: rgba(56, 189, 248, 0.16);
+      border: 2px solid var(--accent);
+      color: var(--text-main);
+      border-radius: 10px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Main Clock Card */
+    .clock-card {
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: var(--border-thick);
+      box-shadow: var(--border-glow);
+      border-radius: 22px;
+      padding: 16px 14px;
+      text-align: center;
+    }
+
+    .date-line {
+      font-size: 13px;
+      color: var(--accent-2);
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .picker-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .scrub-box {
+      background: var(--glass-soft);
+      border: var(--border-thick);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+      border-radius: 16px;
+      padding: 10px 14px;
+      min-width: 98px;
+      touch-action: none;
+      cursor: ns-resize;
+    }
+
+    .scrub-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+    }
+
+    .scrub-val {
+      font-size: 42px;
+      font-weight: 800;
+      line-height: 1.05;
+      color: #ffffff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .colon {
+      font-size: 36px;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .ampm-col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .ampm-btn {
+      border: var(--border-subtle);
+      background: var(--glass-soft);
+      color: var(--text-dim);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .ampm-btn.active {
+      border: 3px solid var(--accent-2);
+      background: rgba(34, 211, 238, 0.22);
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
+    }
+
+    .scrub-hint {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Controls Card */
+    .panel-card {
+      background: var(--glass);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: var(--border-thick);
+      box-shadow: var(--border-glow);
+      border-radius: 20px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .field-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-2);
+      margin-bottom: 6px;
+    }
+
+    .days-row {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+    }
+
+    .day-btn {
+      border: var(--border-subtle);
+      background: var(--glass-soft);
+      color: var(--text-dim);
+      border-radius: 10px;
+      padding: 8px 0;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .day-btn.active {
+      border: 2.5px solid var(--accent);
+      background: rgba(56, 189, 248, 0.24);
+      color: #ffffff;
+    }
+
+    .input-label {
+      width: 100%;
+      background: rgba(9, 14, 28, 0.75);
+      border: var(--border-subtle);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: var(--text-main);
+      font-size: 14px;
+      outline: none;
+    }
+
+    .input-label:focus {
+      border: 2.5px solid var(--accent);
+    }
+
+    .ring-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    select.ring-select {
+      flex: 1;
+      background: rgba(9, 14, 28, 0.85);
+      border: var(--border-subtle);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .btn-preview {
+      border: 2.5px solid var(--accent-2);
+      background: rgba(34, 211, 238, 0.16);
+      color: #ffffff;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-save {
+      width: 100%;
+      border: 3px solid var(--accent-2);
+      background: linear-gradient(90deg, #0284c7, #0891b2);
+      color: #ffffff;
+      border-radius: 14px;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+    }
+
+    /* Alarm List */
+    .alarm-item {
+      background: var(--glass);
+      border: var(--border-thick);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.22);
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .alarm-time {
+      font-size: 22px;
+      font-weight: 800;
+      color: #ffffff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .alarm-meta {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    .alarm-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toggle-btn {
+      border: 2px solid var(--text-dim);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-dim);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .toggle-btn.on {
+      border: 2.5px solid var(--ok);
+      background: rgba(52, 211, 153, 0.2);
+      color: var(--ok);
+    }
+
+    .del-btn {
+      border: 2px solid var(--danger);
+      background: rgba(251, 113, 133, 0.14);
+      color: var(--danger);
+      border-radius: 10px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Ringing Banner */
+    .ringing-banner {
+      display: none;
+      position: fixed;
+      inset: 14px;
+      z-index: 99;
+      background: rgba(9, 14, 28, 0.96);
+      border: 4px solid var(--accent-2);
+      box-shadow: 0 0 28px rgba(34, 211, 238, 0.55);
+      border-radius: 24px;
+      padding: 24px 18px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 16px;
+    }
+
+    .ringing-banner.show {
+      display: flex;
+    }
+
+    .ringing-clock {
+      font-size: 48px;
+      font-weight: 900;
+      color: var(--accent-2);
+    }
+
+    .btn-stop {
+      border: 3px solid #ffffff;
+      background: #e11d48;
+      color: #ffffff;
+      border-radius: 14px;
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Collapsible Mini Clock Bar -->
+    <div id="miniBar" class="mini-bar">
+      <span id="miniClock" class="mini-time">--:--:--</span>
+      <span id="miniNext" class="mini-detail">Chưa có báo thức bật</span>
+      <button id="toggleMiniBtn" class="btn-mini" type="button">Thu gọn</button>
+    </div>
+
+    <!-- Main Digital Clock & Touch Scrubbing -->
+    <section class="clock-card">
+      <div id="dateText" class="date-line">Đang tải thời gian...</div>
+
+      <div class="picker-row">
+        <div id="hourScrub" class="scrub-box" role="spinbutton" aria-label="Giờ">
+          <div class="scrub-label">Giờ</div>
+          <div id="hourVal" class="scrub-val">07</div>
+        </div>
+
+        <div class="colon">:</div>
+
+        <div id="minScrub" class="scrub-box" role="spinbutton" aria-label="Phút">
+          <div class="scrub-label">Phút</div>
+          <div id="minVal" class="scrub-val">00</div>
+        </div>
+
+        <div class="ampm-col">
+          <button id="amBtn" class="ampm-btn active" type="button">AM</button>
+          <button id="pmBtn" class="ampm-btn" type="button">PM</button>
+        </div>
+      </div>
+
+      <div class="scrub-hint">Vuốt lên / xuống trên ô Giờ hoặc Phút để chỉnh nhanh</div>
+    </section>
+
+    <!-- Alarm Settings -->
+    <section class="panel-card">
+      <div>
+        <div class="field-title">Lặp lại theo ngày</div>
+        <div id="daysRow" class="days-row"></div>
+      </div>
+
+      <div>
+        <div class="field-title">Nhãn báo thức</div>
+        <input id="labelInput" class="input-label" type="text" maxlength="40" placeholder="Ví dụ: Dậy đi làm, Uống thuốc..." />
+      </div>
+
+      <div>
+        <div class="field-title">Nhạc chuông (6 âm cơ bản)</div>
+        <div class="ring-row">
+          <select id="ringSelect" class="ring-select">
+            <option value="0">1. Chuông Điện Tử</option>
+            <option value="1">2. Nhịp Sáng Sớm</option>
+            <option value="2">3. Tiếng Bíp Nhanh</option>
+            <option value="3">4. Giai Điệu Nhẹ</option>
+            <option value="4">5. Xung Năng Lượng</option>
+            <option value="5">6. Chuông Cổ Điển</option>
+          </select>
+          <button id="previewBtn" class="btn-preview" type="button">Nghe thử</button>
+        </div>
+      </div>
+
+      <button id="addAlarmBtn" class="btn-save" type="button">+ Thêm báo thức</button>
+    </section>
+
+    <!-- Saved Alarms -->
+    <section id="alarmList" style="display:flex;flex-direction:column;gap:10px;"></section>
+  </div>
+
+  <!-- Ringing Overlay -->
+  <div id="ringingBanner" class="ringing-banner">
+    <div style="font-size:15px;font-weight:700;color:#cbd5e1;">ĐANG BÁO THỨC</div>
+    <div id="ringingClock" class="ringing-clock">07:00 AM</div>
+    <div id="ringingLabel" style="font-size:16px;color:#f8fafc;">Báo thức</div>
+    <button id="stopRingBtn" class="btn-stop" type="button">Tắt báo thức</button>
+  </div>
+
+  <script>
+    const DAY_NAMES = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+    const STORAGE_KEY = "dong_ho_bao_thuc_dien_tu_v1";
+
+    let hour12 = 7;
+    let minuteVal = 0;
+    let period = "AM";
+    let selectedDays = [1, 2, 3, 4, 5]; // 0=CN..6=T6, mapping T2..CN below
+    let alarms = [];
+    let audioCtx = null;
+    let previewTimer = null;
+    let ringingTimer = null;
+    let activeRingingId = null;
+    let lastTriggeredKey = "";
+
+    const miniBar = document.getElementById("miniBar");
+    const miniClock = document.getElementById("miniClock");
+    const miniNext = document.getElementById("miniNext");
+    const toggleMiniBtn = document.getElementById("toggleMiniBtn");
+    const dateText = document.getElementById("dateText");
+    const hourValEl = document.getElementById("hourVal");
+    const minValEl = document.getElementById("minVal");
+    const amBtn = document.getElementById("amBtn");
+    const pmBtn = document.getElementById("pmBtn");
+    const daysRow = document.getElementById("daysRow");
+    const labelInput = document.getElementById("labelInput");
+    const ringSelect = document.getElementById("ringSelect");
+    const previewBtn = document.getElementById("previewBtn");
+    const addAlarmBtn = document.getElementById("addAlarmBtn");
+    const alarmListEl = document.getElementById("alarmList");
+    const ringingBanner = document.getElementById("ringingBanner");
+    const ringingClock = document.getElementById("ringingClock");
+    const ringingLabel = document.getElementById("ringingLabel");
+    const stopRingBtn = document.getElementById("stopRingBtn");
+
+    function pad2(n) {
+      return String(n).padStart(2, "0");
+    }
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) audioCtx = new Ctx();
+      }
+      if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+    }
+
+    function playToneOnce(typeIdx) {
+      ensureAudio();
+      if (!audioCtx) return;
+
+      const now = audioCtx.currentTime;
+      const patterns = [
+        [880, 1174.66, 880],
+        [523.25, 659.25, 783.99],
+        [1046.5, 1046.5, 1046.5],
+        [440, 554.37, 659.25],
+        [698.46, 987.77, 698.46],
+        [587.33, 880, 587.33]
+      ];
+      const freqs = patterns[typeIdx] || patterns[0];
+
+      freqs.forEach((f, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = i % 2 === 0 ? "sine" : "triangle";
+        osc.frequency.setValueAtTime(f, now + i * 0.14);
+        gain.gain.setValueAtTime(0.001, now + i * 0.14);
+        gain.gain.exponentialRampToValueAtTime(0.14, now + i * 0.14 + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.14 + 0.13);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + i * 0.14);
+        osc.stop(now + i * 0.14 + 0.14);
+      });
+    }
+
+    function stopPreview() {
+      if (previewTimer) {
+        clearInterval(previewTimer);
+        previewTimer = null;
+      }
+      previewBtn.textContent = "Nghe thử";
+    }
+
+    previewBtn.addEventListener("click", () => {
+      if (previewTimer) {
+        stopPreview();
+        return;
+      }
+      const idx = Number(ringSelect.value) || 0;
+      previewBtn.textContent = "Dừng";
+      playToneOnce(idx);
+      previewTimer = setInterval(() => playToneOnce(idx), 650);
+      setTimeout(stopPreview, 3200);
+    });
+
+    toggleMiniBtn.addEventListener("click", () => {
+      miniBar.classList.toggle("collapsed");
+      toggleMiniBtn.textContent = miniBar.classList.contains("collapsed") ? "Mở" : "Thu gọn";
+    });
+
+    function renderPicker() {
+      hourValEl.textContent = pad2(hour12);
+      minValEl.textContent = pad2(minuteVal);
+      amBtn.classList.toggle("active", period === "AM");
+      pmBtn.classList.toggle("active", period === "PM");
+    }
+
+    amBtn.addEventListener("click", () => {
+      period = "AM";
+      renderPicker();
+    });
+
+    pmBtn.addEventListener("click", () => {
+      period = "PM";
+      renderPicker();
+    });
+
+    function bindScrub(el, onDelta) {
+      let startY = null;
+      let acc = 0;
+      const stepPx = 18;
+
+      el.addEventListener("pointerdown", (e) => {
+        startY = e.clientY;
+        acc = 0;
+        el.setPointerCapture(e.pointerId);
+      });
+
+      el.addEventListener("pointermove", (e) => {
+        if (startY === null) return;
+        const dy = startY - e.clientY;
+        startY = e.clientY;
+        acc += dy;
+        while (Math.abs(acc) >= stepPx) {
+          const dir = acc > 0 ? 1 : -1;
+          onDelta(dir);
+          acc -= dir * stepPx;
+        }
+      });
+
+      const endScrub = () => {
+        startY = null;
+        acc = 0;
+      };
+      el.addEventListener("pointerup", endScrub);
+      el.addEventListener("pointercancel", endScrub);
+    }
+
+    bindScrub(document.getElementById("hourScrub"), (dir) => {
+      hour12 = hour12 + dir;
+      if (hour12 > 12) hour12 = 1;
+      if (hour12 < 1) hour12 = 12;
+      renderPicker();
+    });
+
+    bindScrub(document.getElementById("minScrub"), (dir) => {
+      minuteVal = minuteVal + dir;
+      if (minuteVal > 59) minuteVal = 0;
+      if (minuteVal < 0) minuteVal = 59;
+      renderPicker();
+    });
+
+    // Map UI index 0..6 (T2..CN) to JS getDay() 1..6, 0
+    function uiIndexToJsDay(uiIdx) {
+      return uiIdx === 6 ? 0 : uiIdx + 1;
+    }
+
+    let activeDayUi = [0, 1, 2, 3, 4]; // T2..T6 default
+
+    function renderDays() {
+      daysRow.innerHTML = "";
+      DAY_NAMES.forEach((name, idx) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "day-btn" + (activeDayUi.includes(idx) ? " active" : "");
+        btn.textContent = name;
+        btn.addEventListener("click", () => {
+          if (activeDayUi.includes(idx)) {
+            activeDayUi = activeDayUi.filter((d) => d !== idx);
+          } else {
+            activeDayUi.push(idx);
+          }
+          renderDays();
+        });
+        daysRow.appendChild(btn);
+      });
+    }
+
+    function to24Hour(h12, ap) {
+      let h = h12 % 12;
+      if (ap === "PM") h += 12;
+      return h;
+    }
+
+    function formatAlarmTime(a) {
+      return `${pad2(a.hour12)}:${pad2(a.minute)} ${a.period}`;
+    }
+
+    function formatRepeatText(jsDays) {
+      if (!jsDays || jsDays.length === 0) return "Một lần";
+      if (jsDays.length === 7) return "Mỗi ngày";
+      const orderedUi = [1, 2, 3, 4, 5, 6, 0]
+        .map((jd, uiI) => (jsDays.includes(jd) ? DAY_NAMES[uiI] : null))
+        .filter(Boolean);
+      return orderedUi.join(", ");
+    }
+
+    function saveAlarms() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(alarms));
+      } catch (_) {}
+      updateMiniNext();
+    }
+
+    function loadAlarms() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) alarms = JSON.parse(raw) || [];
+      } catch (_) {
+        alarms = [];
+      }
+    }
+
+    function updateMiniNext() {
+      const enabled = alarms.filter((a) => a.enabled);
+      if (enabled.length === 0) {
+        miniNext.textContent = "Chưa có báo thức bật";
+        return;
+      }
+      const next = enabled[0];
+      miniNext.textContent = `Tiếp: ${formatAlarmTime(next)} • ${next.label || "Báo thức"}`;
+    }
+
+    function renderAlarms() {
+      alarmListEl.innerHTML = "";
+      alarms.forEach((a) => {
+        const item = document.createElement("div");
+        item.className = "alarm-item";
+
+        const info = document.createElement("div");
+        info.innerHTML = `
+          <div class="alarm-time">${formatAlarmTime(a)}</div>
+          <div class="alarm-meta">${a.label ? a.label + " • " : ""}${formatRepeatText(a.days)} • Chuông #${(a.ring || 0) + 1}</div>
+        `;
+
+        const actions = document.createElement("div");
+        actions.className = "alarm-actions";
+
+        const toggleBtn = document.createElement("button");
+        toggleBtn.type = "button";
+        toggleBtn.className = "toggle-btn" + (a.enabled ? " on" : "");
+        toggleBtn.textContent = a.enabled ? "BẬT" : "TẮT";
+        toggleBtn.addEventListener("click", () => {
+          a.enabled = !a.enabled;
+          saveAlarms();
+          renderAlarms();
+        });
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "del-btn";
+        delBtn.textContent = "Xóa";
+        delBtn.addEventListener("click", () => {
+          alarms = alarms.filter((x) => x.id !== a.id);
+          saveAlarms();
+          renderAlarms();
+        });
+
+        actions.appendChild(toggleBtn);
+        actions.appendChild(delBtn);
+
+        item.appendChild(info);
+        item.appendChild(actions);
+        alarmListEl.appendChild(item);
+      });
+      updateMiniNext();
+    }
+
+    addAlarmBtn.addEventListener("click", () => {
+      stopPreview();
+      const jsDays = activeDayUi.map(uiIndexToJsDay);
+      const newAlarm = {
+        id: Date.now().toString(),
+        hour12,
+        minute: minuteVal,
+        period,
+        hour24: to24Hour(hour12, period),
+        days: jsDays,
+        label: labelInput.value.trim(),
+        ring: Number(ringSelect.value) || 0,
+        enabled: true
+      };
+      alarms.unshift(newAlarm);
+      labelInput.value = "";
+      saveAlarms();
+      renderAlarms();
+    });
+
+    function triggerAlarm(alarm) {
+      stopPreview();
+      activeRingingId = alarm.id;
+      ringingClock.textContent = formatAlarmTime(alarm);
+      ringingLabel.textContent = alarm.label || "Báo thức";
+      ringingBanner.classList.add("show");
+
+      playToneOnce(alarm.ring || 0);
+      if (ringingTimer) clearInterval(ringingTimer);
+      ringingTimer = setInterval(() => playToneOnce(alarm.ring || 0), 900);
+
+      if (navigator.vibrate) {
+        navigator.vibrate([500, 300, 500, 300, 500]);
+      }
+    }
+
+    stopRingBtn.addEventListener("click", () => {
+      ringingBanner.classList.remove("show");
+      if (ringingTimer) {
+        clearInterval(ringingTimer);
+        ringingTimer = null;
+      }
+      if (navigator.vibrate) navigator.vibrate(0);
+
+      if (activeRingingId) {
+        const target = alarms.find((x) => x.id === activeRingingId);
+        if (target && (!target.days || target.days.length === 0)) {
+          target.enabled = false;
+          saveAlarms();
+          renderAlarms();
+        }
+        activeRingingId = null;
+      }
+    });
+
+    function tickClock() {
+      const now = new Date();
+      const h24 = now.getHours();
+      const m = now.getMinutes();
+      const s = now.getSeconds();
+      const ap = h24 >= 12 ? "PM" : "AM";
+      const h12Now = h24 % 12 || 12;
+
+      miniClock.textContent = `${pad2(h12Now)}:${pad2(m)}:${pad2(s)} ${ap}`;
+
+      const viDays = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+      dateText.textContent = `${viDays[now.getDay()]}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
+
+      const triggerKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${h24}-${m}`;
+      if (!activeRingingId && triggerKey !== lastTriggeredKey) {
+        const matched = alarms.find((a) => {
+          if (!a.enabled) return false;
+          const aH24 = to24Hour(a.hour12, a.period);
+          if (aH24 !== h24 || a.minute !== m) return false;
+          if (!a.days || a.days.length === 0) return true;
+          return a.days.includes(now.getDay());
+        });
+        if (matched) {
+          lastTriggeredKey = triggerKey;
+          triggerAlarm(matched);
+        }
+      }
+    }
+
+    loadAlarms();
+    renderPicker();
+    renderDays();
+    renderAlarms();
+    tickClock();
+    setInterval(tickClock, 1000);
+  </script>
+</body>
+</html>
