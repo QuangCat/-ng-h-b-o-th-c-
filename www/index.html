@@ -57,10 +57,26 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .mini-bar.collapsed {
+      padding: 6px 10px;
+      gap: 6px;
+      border-radius: 14px;
     }
 
     .mini-bar.collapsed .mini-detail {
       display: none;
+    }
+
+    .mini-bar.collapsed .mini-time {
+      font-size: 13px;
+    }
+
+    .mini-bar.collapsed .btn-mini {
+      padding: 4px 9px;
+      font-size: 11px;
     }
 
     .mini-time {
@@ -89,6 +105,7 @@
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
+      touch-action: manipulation;
     }
 
     /* Main Clock Card */
@@ -165,6 +182,7 @@
       font-size: 13px;
       font-weight: 800;
       cursor: pointer;
+      touch-action: manipulation;
     }
 
     .ampm-btn.active {
@@ -216,6 +234,7 @@
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
+      touch-action: manipulation;
     }
 
     .day-btn.active {
@@ -233,6 +252,7 @@
       color: var(--text-main);
       font-size: 14px;
       outline: none;
+      user-select: text;
     }
 
     .input-label:focus {
@@ -266,6 +286,7 @@
       font-weight: 700;
       cursor: pointer;
       white-space: nowrap;
+      touch-action: manipulation;
     }
 
     .btn-save {
@@ -279,6 +300,7 @@
       font-weight: 800;
       cursor: pointer;
       box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+      touch-action: manipulation;
     }
 
     /* Alarm List */
@@ -322,6 +344,7 @@
       font-size: 12px;
       font-weight: 800;
       cursor: pointer;
+      touch-action: manipulation;
     }
 
     .toggle-btn.on {
@@ -339,6 +362,7 @@
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
+      touch-action: manipulation;
     }
 
     /* Ringing Banner */
@@ -378,6 +402,7 @@
       font-size: 16px;
       font-weight: 800;
       cursor: pointer;
+      touch-action: manipulation;
     }
   </style>
 </head>
@@ -408,8 +433,8 @@
         </div>
 
         <div class="ampm-col">
-          <button id="amBtn" class="ampm-btn active" type="button">AM</button>
-          <button id="pmBtn" class="ampm-btn" type="button">PM</button>
+          <button id="amBtn" class="ampm-btn active" type="button" data-period="AM">AM</button>
+          <button id="pmBtn" class="ampm-btn" type="button" data-period="PM">PM</button>
         </div>
       </div>
 
@@ -465,7 +490,6 @@
     let hour12 = 7;
     let minuteVal = 0;
     let period = "AM";
-    let selectedDays = [1, 2, 3, 4, 5]; // 0=CN..6=T6, mapping T2..CN below
     let alarms = [];
     let audioCtx = null;
     let previewTimer = null;
@@ -557,26 +581,48 @@
       setTimeout(stopPreview, 3200);
     });
 
-    toggleMiniBtn.addEventListener("click", () => {
-      miniBar.classList.toggle("collapsed");
-      toggleMiniBtn.textContent = miniBar.classList.contains("collapsed") ? "Mở" : "Thu gọn";
+    function toggleMiniBar() {
+      const isCollapsed = miniBar.classList.toggle("collapsed");
+      toggleMiniBtn.textContent = isCollapsed ? "Mở" : "Thu gọn";
+      toggleMiniBtn.setAttribute("aria-expanded", String(!isCollapsed));
+    }
+
+    toggleMiniBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMiniBar();
     });
 
     function renderPicker() {
+      if (hour12 > 12) hour12 = 1;
+      if (hour12 < 1) hour12 = 12;
+      if (minuteVal > 59) minuteVal = 0;
+      if (minuteVal < 0) minuteVal = 59;
+
       hourValEl.textContent = pad2(hour12);
       minValEl.textContent = pad2(minuteVal);
-      amBtn.classList.toggle("active", period === "AM");
-      pmBtn.classList.toggle("active", period === "PM");
+
+      const isAM = period === "AM";
+      amBtn.classList.toggle("active", isAM);
+      pmBtn.classList.toggle("active", !isAM);
+      amBtn.setAttribute("aria-pressed", String(isAM));
+      pmBtn.setAttribute("aria-pressed", String(!isAM));
     }
 
-    amBtn.addEventListener("click", () => {
-      period = "AM";
+    function setPeriod(nextPeriod) {
+      if (nextPeriod !== "AM" && nextPeriod !== "PM") return;
+      period = nextPeriod;
       renderPicker();
+    }
+
+    amBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      setPeriod("AM");
     });
 
-    pmBtn.addEventListener("click", () => {
-      period = "PM";
-      renderPicker();
+    pmBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      setPeriod("PM");
     });
 
     function bindScrub(el, onDelta) {
@@ -624,12 +670,11 @@
       renderPicker();
     });
 
-    // Map UI index 0..6 (T2..CN) to JS getDay() 1..6, 0
     function uiIndexToJsDay(uiIdx) {
       return uiIdx === 6 ? 0 : uiIdx + 1;
     }
 
-    let activeDayUi = [0, 1, 2, 3, 4]; // T2..T6 default
+    let activeDayUi = [0, 1, 2, 3, 4];
 
     function renderDays() {
       daysRow.innerHTML = "";
