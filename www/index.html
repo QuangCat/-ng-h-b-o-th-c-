@@ -76,6 +76,7 @@
       letter-spacing: 0.6px;
       color: var(--accent-2);
       font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
     }
 
     .mini-detail {
@@ -85,6 +86,7 @@
       text-overflow: ellipsis;
       white-space: nowrap;
       flex: 1;
+      min-width: 0;
     }
 
     .btn-mini {
@@ -97,6 +99,7 @@
       font-weight: 800;
       cursor: pointer;
       touch-action: manipulation;
+      flex-shrink: 0;
     }
 
     /* Main Clock Card */
@@ -201,7 +204,7 @@
       padding-bottom: 28px;
     }
 
-    /* Controls Card (phần gạch chéo đỏ sẽ thu/ẩn khi bấm Thu gọn) */
+    /* Controls Card */
     .panel-card {
       background: var(--glass);
       backdrop-filter: blur(14px);
@@ -312,6 +315,12 @@
     }
 
     /* Alarm List */
+    .alarm-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
     .alarm-item {
       background: var(--glass);
       border: var(--border-thick);
@@ -325,6 +334,11 @@
       flex-shrink: 0;
     }
 
+    .alarm-info {
+      min-width: 0;
+      flex: 1;
+    }
+
     .alarm-time {
       font-size: 22px;
       font-weight: 800;
@@ -336,12 +350,14 @@
       font-size: 12px;
       color: var(--text-dim);
       margin-top: 2px;
+      word-break: break-word;
     }
 
     .alarm-actions {
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-shrink: 0;
     }
 
     .toggle-btn {
@@ -400,6 +416,7 @@
       font-size: 48px;
       font-weight: 900;
       color: var(--accent-2);
+      font-variant-numeric: tabular-nums;
     }
 
     .btn-stop {
@@ -429,21 +446,21 @@
         <div id="dateText" class="date-line">Đang tải thời gian...</div>
 
         <div class="picker-row">
-          <div id="hourScrub" class="scrub-box" role="spinbutton" aria-label="Giờ">
+          <div id="hourScrub" class="scrub-box" role="spinbutton" aria-label="Giờ (12 tiếng)" aria-valuemin="1" aria-valuemax="12">
             <div class="scrub-label">Giờ</div>
             <div id="hourVal" class="scrub-val">07</div>
           </div>
 
           <div class="colon">:</div>
 
-          <div id="minScrub" class="scrub-box" role="spinbutton" aria-label="Phút">
+          <div id="minScrub" class="scrub-box" role="spinbutton" aria-label="Phút" aria-valuemin="0" aria-valuemax="59">
             <div class="scrub-label">Phút</div>
             <div id="minVal" class="scrub-val">00</div>
           </div>
 
           <div class="ampm-col">
-            <button id="amBtn" class="ampm-btn active" type="button" data-period="AM">AM</button>
-            <button id="pmBtn" class="ampm-btn" type="button" data-period="PM">PM</button>
+            <button id="amBtn" class="ampm-btn active" type="button" data-period="AM" aria-pressed="true">AM</button>
+            <button id="pmBtn" class="ampm-btn" type="button" data-period="PM" aria-pressed="false">PM</button>
           </div>
         </div>
 
@@ -451,7 +468,7 @@
       </section>
     </div>
 
-    <!-- Phần dưới: khung gạch đỏ thu/mở được + danh sách báo thức cuộn mượt -->
+    <!-- Phần dưới: khung cấu hình thu/mở được + danh sách báo thức cuộn mượt -->
     <div id="bottomScrollZone" class="bottom-scroll-zone">
       <section id="panelCard" class="panel-card">
         <div>
@@ -482,12 +499,12 @@
         <button id="addAlarmBtn" class="btn-save" type="button">+ Thêm báo thức</button>
       </section>
 
-      <section id="alarmList" style="display:flex;flex-direction:column;gap:10px;"></section>
+      <section id="alarmList" class="alarm-list"></section>
     </div>
   </div>
 
   <!-- Ringing Banner -->
-  <div id="ringingBanner" class="ringing-banner">
+  <div id="ringingBanner" class="ringing-banner" role="dialog" aria-modal="true" aria-labelledby="ringingClock">
     <div style="font-size:15px;font-weight:700;color:#cbd5e1;">ĐANG BÁO THỨC</div>
     <div id="ringingClock" class="ringing-clock">07:00 AM</div>
     <div id="ringingLabel" style="font-size:16px;color:#f8fafc;">Báo thức</div>
@@ -495,79 +512,13 @@
   </div>
 
   <script>
-    const DAY_NAMES = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
-    const STORAGE_KEY = "dong_ho_bao_thuc_dien_tu_v1";
+    (function () {
+      "use strict";
 
-    let hour24 = 7;
-    let minuteVal = 0;
-    let period = "AM";
-    let alarms = [];
-    let audioCtx = null;
-    let previewTimer = null;
-    let ringingTimer = null;
-    let activeRingingId = null;
-    let lastTriggeredKey = "";
-    let isPanelCollapsed = false;
-
-    const appRoot = document.getElementById("appRoot");
-    const miniBar = document.getElementById("miniBar");
-    const miniClock = document.getElementById("miniClock");
-    const miniNext = document.getElementById("miniNext");
-    const toggleMiniBtn = document.getElementById("toggleMiniBtn");
-    const panelCard = document.getElementById("panelCard");
-    const dateText = document.getElementById("dateText");
-    const hourValEl = document.getElementById("hourVal");
-    const minValEl = document.getElementById("minVal");
-    const amBtn = document.getElementById("amBtn");
-    const pmBtn = document.getElementById("pmBtn");
-    const daysRow = document.getElementById("daysRow");
-    const labelInput = document.getElementById("labelInput");
-    const ringSelect = document.getElementById("ringSelect");
-    const previewBtn = document.getElementById("previewBtn");
-    const addAlarmBtn = document.getElementById("addAlarmBtn");
-    const alarmListEl = document.getElementById("alarmList");
-    const ringingBanner = document.getElementById("ringingBanner");
-    const ringingClock = document.getElementById("ringingClock");
-    const ringingLabel = document.getElementById("ringingLabel");
-    const stopRingBtn = document.getElementById("stopRingBtn");
-
-    function pad2(n) {
-      return String(n).padStart(2, "0");
-    }
-
-    function applyPanelCollapse() {
-      appRoot.classList.toggle("panel-collapsed", isPanelCollapsed);
-      panelCard.style.display = isPanelCollapsed ? "none" : "";
-      toggleMiniBtn.textContent = isPanelCollapsed ? "Mở" : "Thu gọn";
-    }
-
-    window.__togglePanel = function () {
-      isPanelCollapsed = !isPanelCollapsed;
-      applyPanelCollapse();
-    };
-
-    toggleMiniBtn.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      window.__togglePanel();
-    }, { passive: false });
-
-    function ensureAudio() {
-      if (!audioCtx) {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (Ctx) audioCtx = new Ctx();
-      }
-      if (audioCtx && audioCtx.state === "suspended") {
-        audioCtx.resume();
-      }
-    }
-
-    function playToneOnce(typeIdx) {
-      ensureAudio();
-      if (!audioCtx) return;
-
-      const now = audioCtx.currentTime;
-      const patterns = [
+      const DAY_NAMES = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+      const VI_DAYS = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+      const STORAGE_KEY = "dong_ho_bao_thuc_dien_tu_v1";
+      const TONE_PATTERNS = [
         [880, 1174.66, 880],
         [523.25, 659.25, 783.99],
         [1046.5, 1046.5, 1046.5],
@@ -575,372 +526,807 @@
         [698.46, 987.77, 698.46],
         [587.33, 880, 587.33]
       ];
-      const freqs = patterns[typeIdx] || patterns[0];
 
-      freqs.forEach((f, i) => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = i % 2 === 0 ? "sine" : "triangle";
-        osc.frequency.setValueAtTime(f, now + i * 0.14);
-        gain.gain.setValueAtTime(0.001, now + i * 0.14);
-        gain.gain.exponentialRampToValueAtTime(0.14, now + i * 0.14 + 0.03);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.14 + 0.13);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(now + i * 0.14);
-        osc.stop(now + i * 0.14 + 0.14);
-      });
-    }
+      let hour24 = 7;
+      let minuteVal = 0;
+      let alarms = [];
+      let activeDayUi = [0, 1, 2, 3, 4];
+      let isPanelCollapsed = false;
 
-    function stopPreview() {
-      if (previewTimer) {
-        clearInterval(previewTimer);
-        previewTimer = null;
-      }
-      previewBtn.textContent = "Nghe thử";
-    }
+      // Quản lý âm thanh và bộ hẹn giờ tập trung
+      let audioCtx = null;
+      let activeNodes = [];
+      let previewIntervalId = null;
+      let previewAutoStopId = null;
+      let ringingIntervalId = null;
+      let clockIntervalId = null;
+      let activeRingingId = null;
+      let toneToken = 0;
 
-    previewBtn.addEventListener("click", () => {
-      if (previewTimer) {
-        stopPreview();
-        return;
-      }
-      const idx = Number(ringSelect.value) || 0;
-      previewBtn.textContent = "Dừng";
-      playToneOnce(idx);
-      previewTimer = setInterval(() => playToneOnce(idx), 650);
-      setTimeout(stopPreview, 3200);
-    });
+      // Lưu dấu mốc kích hoạt theo từng báo thức (id + ngày + giờ + phút) để tránh trùng lặp
+      const triggeredOccurrenceSet = new Set();
 
-    function getHour12From24(h24) {
-      return h24 % 12 || 12;
-    }
+      const appRoot = document.getElementById("appRoot");
+      const miniClock = document.getElementById("miniClock");
+      const miniNext = document.getElementById("miniNext");
+      const toggleMiniBtn = document.getElementById("toggleMiniBtn");
+      const panelCard = document.getElementById("panelCard");
+      const dateText = document.getElementById("dateText");
+      const hourScrubEl = document.getElementById("hourScrub");
+      const minScrubEl = document.getElementById("minScrub");
+      const hourValEl = document.getElementById("hourVal");
+      const minValEl = document.getElementById("minVal");
+      const amBtn = document.getElementById("amBtn");
+      const pmBtn = document.getElementById("pmBtn");
+      const daysRow = document.getElementById("daysRow");
+      const labelInput = document.getElementById("labelInput");
+      const ringSelect = document.getElementById("ringSelect");
+      const previewBtn = document.getElementById("previewBtn");
+      const addAlarmBtn = document.getElementById("addAlarmBtn");
+      const alarmListEl = document.getElementById("alarmList");
+      const ringingBanner = document.getElementById("ringingBanner");
+      const ringingClock = document.getElementById("ringingClock");
+      const ringingLabel = document.getElementById("ringingLabel");
+      const stopRingBtn = document.getElementById("stopRingBtn");
 
-    function renderPicker() {
-      if (hour24 > 23) hour24 = 0;
-      if (hour24 < 0) hour24 = 23;
-      if (minuteVal > 59) minuteVal = 0;
-      if (minuteVal < 0) minuteVal = 59;
-
-      period = hour24 >= 12 ? "PM" : "AM";
-      hourValEl.textContent = pad2(hour24);
-      minValEl.textContent = pad2(minuteVal);
-
-      const isAM = period === "AM";
-      amBtn.classList.toggle("active", isAM);
-      pmBtn.classList.toggle("active", !isAM);
-      amBtn.setAttribute("aria-pressed", String(isAM));
-      pmBtn.setAttribute("aria-pressed", String(!isAM));
-    }
-
-    function setPeriod(nextPeriod) {
-      if (nextPeriod === "AM" && hour24 >= 12) {
-        hour24 -= 12;
-      } else if (nextPeriod === "PM" && hour24 < 12) {
-        hour24 += 12;
-      }
-      renderPicker();
-    }
-
-    amBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      setPeriod("AM");
-    });
-
-    pmBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      setPeriod("PM");
-    });
-
-    function bindScrub(el, onDelta) {
-      let startY = null;
-      let acc = 0;
-      let activeTouchId = null;
-      const stepPx = 14;
-
-      function applyMove(clientY) {
-        if (startY === null) return;
-        const dy = startY - clientY;
-        startY = clientY;
-        acc += dy;
-        while (Math.abs(acc) >= stepPx) {
-          const dir = acc > 0 ? 1 : -1;
-          onDelta(dir);
-          acc -= dir * stepPx;
-        }
+      function pad2(n) {
+        return String(n).padStart(2, "0");
       }
 
-      function resetScrub() {
-        startY = null;
-        acc = 0;
-        activeTouchId = null;
+      function clampInt(val, min, max, fallback) {
+        const num = Number(val);
+        if (!Number.isFinite(num)) return fallback;
+        const intVal = Math.trunc(num);
+        if (intVal < min || intVal > max) return fallback;
+        return intVal;
       }
 
-      el.addEventListener("touchstart", (e) => {
-        if (e.touches.length > 0) {
-          const t = e.touches[0];
-          activeTouchId = t.identifier;
-          startY = t.clientY;
-          acc = 0;
-          e.preventDefault();
-        }
-      }, { passive: false });
-
-      el.addEventListener("touchmove", (e) => {
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          const t = e.changedTouches[i];
-          if (t.identifier === activeTouchId) {
-            e.preventDefault();
-            applyMove(t.clientY);
-            break;
-          }
-        }
-      }, { passive: false });
-
-      el.addEventListener("touchend", resetScrub);
-      el.addEventListener("touchcancel", resetScrub);
-
-      el.addEventListener("pointerdown", (e) => {
-        if (e.pointerType === "touch") return;
-        startY = e.clientY;
-        acc = 0;
-        el.setPointerCapture(e.pointerId);
-      });
-
-      el.addEventListener("pointermove", (e) => {
-        if (e.pointerType === "touch") return;
-        applyMove(e.clientY);
-      });
-
-      el.addEventListener("pointerup", (e) => {
-        if (e.pointerType === "touch") return;
-        resetScrub();
-      });
-      el.addEventListener("pointercancel", (e) => {
-        if (e.pointerType === "touch") return;
-        resetScrub();
-      });
-    }
-
-    bindScrub(document.getElementById("hourScrub"), (dir) => {
-      hour24 = (hour24 + dir + 24) % 24;
-      renderPicker();
-    });
-
-    bindScrub(document.getElementById("minScrub"), (dir) => {
-      minuteVal = (minuteVal + dir + 60) % 60;
-      renderPicker();
-    });
-
-    function uiIndexToJsDay(uiIdx) {
-      return uiIdx === 6 ? 0 : uiIdx + 1;
-    }
-
-    let activeDayUi = [0, 1, 2, 3, 4];
-
-    function renderDays() {
-      daysRow.innerHTML = "";
-      DAY_NAMES.forEach((name, idx) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "day-btn" + (activeDayUi.includes(idx) ? " active" : "");
-        btn.textContent = name;
-        btn.addEventListener("click", () => {
-          if (activeDayUi.includes(idx)) {
-            activeDayUi = activeDayUi.filter((d) => d !== idx);
-          } else {
-            activeDayUi.push(idx);
-          }
-          renderDays();
-        });
-        daysRow.appendChild(btn);
-      });
-    }
-
-    function to24Hour(h12, ap) {
-      let h = h12 % 12;
-      if (ap === "PM") h += 12;
-      return h;
-    }
-
-    function formatAlarmTime(a) {
-      const h24 = typeof a.hour24 === "number" ? a.hour24 : to24Hour(a.hour12, a.period);
-      const ap = h24 >= 12 ? "PM" : "AM";
-      return `${pad2(h24)}:${pad2(a.minute)} ${ap}`;
-    }
-
-    function formatRepeatText(jsDays) {
-      if (!jsDays || jsDays.length === 0) return "Một lần";
-      if (jsDays.length === 7) return "Mỗi ngày";
-      const orderedUi = [1, 2, 3, 4, 5, 6, 0]
-        .map((jd, uiI) => (jsDays.includes(jd) ? DAY_NAMES[uiI] : null))
-        .filter(Boolean);
-      return orderedUi.join(", ");
-    }
-
-    function saveAlarms() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(alarms));
-      } catch (_) {}
-      updateMiniNext();
-    }
-
-    function loadAlarms() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) alarms = JSON.parse(raw) || [];
-      } catch (_) {
-        alarms = [];
+      function to24Hour(h12, ap) {
+        const safeH12 = clampInt(h12, 1, 12, 7);
+        const h = safeH12 % 12;
+        return ap === "PM" ? h + 12 : h;
       }
-    }
 
-    function updateMiniNext() {
-      const enabled = alarms.filter((a) => a.enabled);
-      if (enabled.length === 0) {
-        miniNext.textContent = "Chưa có báo thức bật";
-        return;
+      function getHour12From24(h24) {
+        return h24 % 12 || 12;
       }
-      const next = enabled[0];
-      miniNext.textContent = `Tiếp: ${formatAlarmTime(next)} • ${next.label || "Báo thức"}`;
-    }
 
-    function renderAlarms() {
-      alarmListEl.innerHTML = "";
-      alarms.forEach((a) => {
-        const item = document.createElement("div");
-        item.className = "alarm-item";
+      function getPeriodFrom24(h24) {
+        return h24 >= 12 ? "PM" : "AM";
+      }
 
-        const info = document.createElement("div");
-        info.innerHTML = `
-          <div class="alarm-time">${formatAlarmTime(a)}</div>
-          <div class="alarm-meta">${a.label ? a.label + " • " : ""}${formatRepeatText(a.days)} • Chuông #${(a.ring || 0) + 1}</div>
-        `;
+      function format12HourDisplay(h24, minute) {
+        const h12 = getHour12From24(h24);
+        const ap = getPeriodFrom24(h24);
+        return `${pad2(h12)}:${pad2(minute)} ${ap}`;
+      }
 
-        const actions = document.createElement("div");
-        actions.className = "alarm-actions";
+      // Thu / mở bảng điều khiển
+      function applyPanelCollapse() {
+        appRoot.classList.toggle("panel-collapsed", isPanelCollapsed);
+        panelCard.style.display = isPanelCollapsed ? "none" : "";
+        toggleMiniBtn.textContent = isPanelCollapsed ? "Mở" : "Thu gọn";
+        toggleMiniBtn.setAttribute("aria-expanded", String(!isPanelCollapsed));
+      }
 
-        const toggleBtn = document.createElement("button");
-        toggleBtn.type = "button";
-        toggleBtn.className = "toggle-btn" + (a.enabled ? " on" : "");
-        toggleBtn.textContent = a.enabled ? "BẬT" : "TẮT";
-        toggleBtn.addEventListener("click", () => {
-          a.enabled = !a.enabled;
-          saveAlarms();
-          renderAlarms();
-        });
-
-        const delBtn = document.createElement("button");
-        delBtn.type = "button";
-        delBtn.className = "del-btn";
-        delBtn.textContent = "Xóa";
-        delBtn.addEventListener("click", () => {
-          alarms = alarms.filter((x) => x.id !== a.id);
-          saveAlarms();
-          renderAlarms();
-        });
-
-        actions.appendChild(toggleBtn);
-        actions.appendChild(delBtn);
-
-        item.appendChild(info);
-        item.appendChild(actions);
-        alarmListEl.appendChild(item);
-      });
-      updateMiniNext();
-    }
-
-    addAlarmBtn.addEventListener("click", () => {
-      stopPreview();
-      const jsDays = activeDayUi.map(uiIndexToJsDay);
-      const currentH12 = getHour12From24(hour24);
-      const currentPeriod = hour24 >= 12 ? "PM" : "AM";
-      const newAlarm = {
-        id: Date.now().toString(),
-        hour12: currentH12,
-        minute: minuteVal,
-        period: currentPeriod,
-        hour24: hour24,
-        days: jsDays,
-        label: labelInput.value.trim(),
-        ring: Number(ringSelect.value) || 0,
-        enabled: true
+      window.__togglePanel = function () {
+        isPanelCollapsed = !isPanelCollapsed;
+        applyPanelCollapse();
       };
-      alarms.unshift(newAlarm);
-      labelInput.value = "";
-      saveAlarms();
-      renderAlarms();
-    });
 
-    function triggerAlarm(alarm) {
-      stopPreview();
-      activeRingingId = alarm.id;
-      ringingClock.textContent = formatAlarmTime(alarm);
-      ringingLabel.textContent = alarm.label || "Báo thức";
-      ringingBanner.classList.add("show");
+      let lastMiniTouchTime = 0;
+      toggleMiniBtn.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const now = Date.now();
+        if (now - lastMiniTouchTime < 250) return;
+        lastMiniTouchTime = now;
+        window.__togglePanel();
+      }, { passive: false });
 
-      playToneOnce(alarm.ring || 0);
-      if (ringingTimer) clearInterval(ringingTimer);
-      ringingTimer = setInterval(() => playToneOnce(alarm.ring || 0), 900);
-
-      if (navigator.vibrate) {
-        navigator.vibrate([500, 300, 500, 300, 500]);
+      // Quản lý AudioContext và dọn dẹp luồng âm thanh
+      function trackAudioNode(node) {
+        activeNodes.push(node);
+        return node;
       }
-    }
 
-    stopRingBtn.addEventListener("click", () => {
-      ringingBanner.classList.remove("show");
-      if (ringingTimer) {
-        clearInterval(ringingTimer);
-        ringingTimer = null;
+      function clearScheduledAudioNodes() {
+        while (activeNodes.length > 0) {
+          const node = activeNodes.pop();
+          try {
+            if (typeof node.stop === "function") node.stop();
+          } catch (_) {}
+          try {
+            if (typeof node.disconnect === "function") node.disconnect();
+          } catch (_) {}
+        }
       }
-      if (navigator.vibrate) navigator.vibrate(0);
 
-      if (activeRingingId) {
-        const target = alarms.find((x) => x.id === activeRingingId);
-        if (target && (!target.days || target.days.length === 0)) {
-          target.enabled = false;
+      async function ensureAudioReady() {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+
+        if (!audioCtx || audioCtx.state === "closed") {
+          audioCtx = new Ctx();
+        }
+        if (audioCtx.state === "suspended") {
+          try {
+            await audioCtx.resume();
+          } catch (_) {}
+        }
+        return audioCtx;
+      }
+
+      async function playToneOnce(typeIdx) {
+        const currentToken = ++toneToken;
+        const ctx = await ensureAudioReady();
+        if (!ctx || currentToken !== toneToken) return;
+
+        const safeIdx = clampInt(typeIdx, 0, TONE_PATTERNS.length - 1, 0);
+        const freqs = TONE_PATTERNS[safeIdx];
+        const startAt = ctx.currentTime + 0.01;
+
+        freqs.forEach((f, i) => {
+          const t0 = startAt + i * 0.14;
+          const t1 = t0 + 0.14;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = i % 2 === 0 ? "sine" : "triangle";
+          osc.frequency.setValueAtTime(f, t0);
+
+          gain.gain.setValueAtTime(0.0001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.14, t0 + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t1 - 0.005);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(t0);
+          osc.stop(t1);
+
+          osc.onended = () => {
+            try { osc.disconnect(); } catch (_) {}
+            try { gain.disconnect(); } catch (_) {}
+            activeNodes = activeNodes.filter((n) => n !== osc && n !== gain);
+          };
+
+          trackAudioNode(osc);
+          trackAudioNode(gain);
+        });
+      }
+
+      function stopPreviewTimersOnly() {
+        if (previewIntervalId !== null) {
+          clearInterval(previewIntervalId);
+          previewIntervalId = null;
+        }
+        if (previewAutoStopId !== null) {
+          clearTimeout(previewAutoStopId);
+          previewAutoStopId = null;
+        }
+      }
+
+      function stopPreview() {
+        toneToken++;
+        stopPreviewTimersOnly();
+        if (!activeRingingId) {
+          clearScheduledAudioNodes();
+        }
+        previewBtn.textContent = "Nghe thử";
+        previewBtn.setAttribute("aria-pressed", "false");
+      }
+
+      function startPreviewForSelectedRing() {
+        stopPreviewTimersOnly();
+        clearScheduledAudioNodes();
+        const idx = clampInt(ringSelect.value, 0, TONE_PATTERNS.length - 1, 0);
+        previewBtn.textContent = "Dừng";
+        previewBtn.setAttribute("aria-pressed", "true");
+        playToneOnce(idx);
+        previewIntervalId = setInterval(() => {
+          if (activeRingingId) {
+            stopPreview();
+            return;
+          }
+          playToneOnce(idx);
+        }, 650);
+        previewAutoStopId = setTimeout(() => {
+          stopPreview();
+        }, 3200);
+      }
+
+      previewBtn.addEventListener("click", () => {
+        const isPlaying = previewIntervalId !== null || previewAutoStopId !== null;
+        if (isPlaying) {
+          stopPreview();
+        } else {
+          startPreviewForSelectedRing();
+        }
+      });
+
+      // Khi đổi nhạc chuông đang nghe thử: dừng âm thanh cũ và phát nhạc chuông mới ngay
+      ringSelect.addEventListener("change", () => {
+        const wasPlaying = previewIntervalId !== null || previewAutoStopId !== null;
+        if (wasPlaying && !activeRingingId) {
+          startPreviewForSelectedRing();
+        }
+      });
+
+      function stopRingingSoundAndTimers() {
+        toneToken++;
+        if (ringingIntervalId !== null) {
+          clearInterval(ringingIntervalId);
+          ringingIntervalId = null;
+        }
+        clearScheduledAudioNodes();
+        if (navigator.vibrate) {
+          try { navigator.vibrate(0); } catch (_) {}
+        }
+      }
+
+      // Bộ chọn giờ 12 tiếng + AM/PM
+      function renderPicker() {
+        hour24 = ((clampInt(hour24, 0, 23, 7) % 24) + 24) % 24;
+        minuteVal = ((clampInt(minuteVal, 0, 59, 0) % 60) + 60) % 60;
+
+        const h12 = getHour12From24(hour24);
+        const currentPeriod = getPeriodFrom24(hour24);
+
+        hourValEl.textContent = pad2(h12);
+        minValEl.textContent = pad2(minuteVal);
+        hourScrubEl.setAttribute("aria-valuenow", String(h12));
+        minScrubEl.setAttribute("aria-valuenow", String(minuteVal));
+
+        const isAM = currentPeriod === "AM";
+        amBtn.classList.toggle("active", isAM);
+        pmBtn.classList.toggle("active", !isAM);
+        amBtn.setAttribute("aria-pressed", String(isAM));
+        pmBtn.setAttribute("aria-pressed", String(!isAM));
+      }
+
+      function setPeriod(nextPeriod) {
+        if (nextPeriod === "AM" && hour24 >= 12) {
+          hour24 -= 12;
+        } else if (nextPeriod === "PM" && hour24 < 12) {
+          hour24 += 12;
+        }
+        renderPicker();
+      }
+
+      amBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        setPeriod("AM");
+      });
+
+      pmBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        setPeriod("PM");
+      });
+
+      function bindScrub(el, onDelta) {
+        let startY = null;
+        let acc = 0;
+        let activeTouchId = null;
+        const stepPx = 14;
+
+        function applyMove(clientY) {
+          if (startY === null) return;
+          const dy = startY - clientY;
+          startY = clientY;
+          acc += dy;
+          while (Math.abs(acc) >= stepPx) {
+            const dir = acc > 0 ? 1 : -1;
+            onDelta(dir);
+            acc -= dir * stepPx;
+          }
+        }
+
+        function resetScrub() {
+          startY = null;
+          acc = 0;
+          activeTouchId = null;
+        }
+
+        el.addEventListener("touchstart", (e) => {
+          if (e.touches.length > 0) {
+            const t = e.touches[0];
+            activeTouchId = t.identifier;
+            startY = t.clientY;
+            acc = 0;
+            e.preventDefault();
+          }
+        }, { passive: false });
+
+        el.addEventListener("touchmove", (e) => {
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            if (t.identifier === activeTouchId) {
+              e.preventDefault();
+              applyMove(t.clientY);
+              break;
+            }
+          }
+        }, { passive: false });
+
+        el.addEventListener("touchend", resetScrub);
+        el.addEventListener("touchcancel", resetScrub);
+
+        el.addEventListener("pointerdown", (e) => {
+          if (e.pointerType === "touch") return;
+          startY = e.clientY;
+          acc = 0;
+          try { el.setPointerCapture(e.pointerId); } catch (_) {}
+        });
+
+        el.addEventListener("pointermove", (e) => {
+          if (e.pointerType === "touch") return;
+          applyMove(e.clientY);
+        });
+
+        el.addEventListener("pointerup", (e) => {
+          if (e.pointerType === "touch") return;
+          resetScrub();
+        });
+        el.addEventListener("pointercancel", (e) => {
+          if (e.pointerType === "touch") return;
+          resetScrub();
+        });
+      }
+
+      // Vuốt lên/xuống đổi giờ trong phạm vi 1..12 nhưng vẫn giữ nguyên nửa ngày AM/PM hiện tại
+      bindScrub(hourScrubEl, (dir) => {
+        const currentPeriod = getPeriodFrom24(hour24);
+        const currentH12 = getHour12From24(hour24);
+        const nextH12 = (((currentH12 - 1 + dir) % 12) + 12) % 12 + 1;
+        hour24 = to24Hour(nextH12, currentPeriod);
+        renderPicker();
+      });
+
+      bindScrub(minScrubEl, (dir) => {
+        minuteVal = (((minuteVal + dir) % 60) + 60) % 60;
+        renderPicker();
+      });
+
+      // Chọn ngày lặp
+      function uiIndexToJsDay(uiIdx) {
+        return uiIdx === 6 ? 0 : uiIdx + 1;
+      }
+
+      function renderDays() {
+        daysRow.innerHTML = "";
+        DAY_NAMES.forEach((name, idx) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          const isSelected = activeDayUi.includes(idx);
+          btn.className = "day-btn" + (isSelected ? " active" : "");
+          btn.textContent = name;
+          btn.setAttribute("aria-pressed", String(isSelected));
+          btn.addEventListener("click", () => {
+            if (activeDayUi.includes(idx)) {
+              activeDayUi = activeDayUi.filter((d) => d !== idx);
+            } else {
+              activeDayUi.push(idx);
+            }
+            renderDays();
+          });
+          daysRow.appendChild(btn);
+        });
+      }
+
+      // Chuẩn hóa và lưu trữ localStorage an toàn
+      function normalizeAlarm(raw, index) {
+        if (!raw || typeof raw !== "object") return null;
+
+        let resolvedH24;
+        if (typeof raw.hour24 === "number" && Number.isFinite(raw.hour24) && raw.hour24 >= 0 && raw.hour24 <= 23) {
+          resolvedH24 = Math.trunc(raw.hour24);
+        } else if (typeof raw.hour12 === "number" && Number.isFinite(raw.hour12)) {
+          const ap = raw.period === "PM" ? "PM" : "AM";
+          resolvedH24 = to24Hour(raw.hour12, ap);
+        } else {
+          resolvedH24 = 7;
+        }
+
+        const safeMinute = clampInt(raw.minute, 0, 59, 0);
+        const safePeriod = raw.period === "AM" || raw.period === "PM" ? raw.period : getPeriodFrom24(resolvedH24);
+        const safeH12 = clampInt(raw.hour12, 1, 12, getHour12From24(resolvedH24));
+
+        const normalizedDays = Array.isArray(raw.days)
+          ? Array.from(new Set(
+              raw.days
+                .map((d) => Number(d))
+                .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+            ))
+          : [];
+
+        const safeLabel = typeof raw.label === "string" ? raw.label.trim().slice(0, 40) : "";
+        const safeRing = clampInt(raw.ring, 0, TONE_PATTERNS.length - 1, 0);
+        const safeEnabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
+        const safeId = typeof raw.id === "string" && raw.id.trim()
+          ? raw.id.trim()
+          : `alarm_${Date.now()}_${index}`;
+
+        return {
+          id: safeId,
+          hour12: safeH12,
+          minute: safeMinute,
+          period: safePeriod,
+          hour24: resolvedH24,
+          days: normalizedDays,
+          label: safeLabel,
+          ring: safeRing,
+          enabled: safeEnabled
+        };
+      }
+
+      function getAlarmHour24(alarm) {
+        if (typeof alarm.hour24 === "number" && Number.isFinite(alarm.hour24)) {
+          return ((Math.trunc(alarm.hour24) % 24) + 24) % 24;
+        }
+        return to24Hour(alarm.hour12, alarm.period);
+      }
+
+      function formatAlarmTime(alarm) {
+        const h24 = getAlarmHour24(alarm);
+        const min = clampInt(alarm.minute, 0, 59, 0);
+        return format12HourDisplay(h24, min);
+      }
+
+      function formatRepeatText(jsDays) {
+        if (!Array.isArray(jsDays) || jsDays.length === 0) return "Một lần";
+        if (jsDays.length === 7) return "Mỗi ngày";
+        const orderedUi = [1, 2, 3, 4, 5, 6, 0]
+          .map((jd, uiI) => (jsDays.includes(jd) ? DAY_NAMES[uiI] : null))
+          .filter(Boolean);
+        return orderedUi.join(", ");
+      }
+
+      // Tính khoảng cách phút từ thời điểm `now` đến lần kích hoạt tiếp theo của một báo thức
+      function getMinutesUntilNextOccurrence(alarm, now) {
+        if (!alarm || !alarm.enabled) return Infinity;
+        const targetH24 = getAlarmHour24(alarm);
+        const targetMin = clampInt(alarm.minute, 0, 59, 0);
+        const days = Array.isArray(alarm.days) ? alarm.days : [];
+
+        const nowMinutesOfDay = now.getHours() * 60 + now.getMinutes();
+        const targetMinutesOfDay = targetH24 * 60 + targetMin;
+        const hasSecondsElapsedInMinute = now.getSeconds() > 0;
+
+        // Báo thức một lần: kích hoạt trong hôm nay nếu chưa qua phút đó, hoặc ngày mai nếu đã qua
+        if (days.length === 0) {
+          let dayOffset = 0;
+          if (targetMinutesOfDay < nowMinutesOfDay || (targetMinutesOfDay === nowMinutesOfDay && hasSecondsElapsedInMinute)) {
+            dayOffset = 1;
+          }
+          return dayOffset * 1440 + (targetMinutesOfDay - nowMinutesOfDay);
+        }
+
+        // Báo thức lặp theo các ngày đã chọn: tìm ngày gần nhất trong 7 ngày tới
+        const currentJsDay = now.getDay();
+        for (let offset = 0; offset <= 7; offset++) {
+          const candidateJsDay = (currentJsDay + offset) % 7;
+          if (!days.includes(candidateJsDay)) continue;
+
+          const diffMins = offset * 1440 + (targetMinutesOfDay - nowMinutesOfDay);
+          if (offset === 0 && (targetMinutesOfDay < nowMinutesOfDay || (targetMinutesOfDay === nowMinutesOfDay && hasSecondsElapsedInMinute))) {
+            continue;
+          }
+          if (diffMins >= 0) {
+            return diffMins;
+          }
+        }
+
+        return Infinity;
+      }
+
+      function findNextAlarm(now) {
+        let bestAlarm = null;
+        let bestDiff = Infinity;
+
+        for (const alarm of alarms) {
+          if (!alarm.enabled) continue;
+          const diff = getMinutesUntilNextOccurrence(alarm, now);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestAlarm = alarm;
+          }
+        }
+
+        return bestAlarm ? { alarm: bestAlarm, diffMinutes: bestDiff } : null;
+      }
+
+      function saveAlarms() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(alarms));
+        } catch (_) {}
+        updateMiniNext(new Date());
+      }
+
+      function loadAlarms() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) {
+            alarms = [];
+            return;
+          }
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) {
+            alarms = [];
+            return;
+          }
+          alarms = parsed
+            .map((item, idx) => normalizeAlarm(item, idx))
+            .filter(Boolean);
+        } catch (_) {
+          alarms = [];
+        }
+      }
+
+      function updateMiniNext(nowDate) {
+        const now = nowDate instanceof Date ? nowDate : new Date();
+        const nextInfo = findNextAlarm(now);
+        if (!nextInfo) {
+          miniNext.textContent = "Chưa có báo thức bật";
+          return;
+        }
+        const { alarm, diffMinutes } = nextInfo;
+        const labelPart = alarm.label ? ` • ${alarm.label}` : "";
+        let etaPart = "";
+        if (diffMinutes === 0) {
+          etaPart = " (Sắp reo)";
+        } else if (diffMinutes < 60) {
+          etaPart = ` (còn ${diffMinutes}p)`;
+        } else if (diffMinutes < 1440) {
+          const h = Math.floor(diffMinutes / 60);
+          const m = diffMinutes % 60;
+          etaPart = m > 0 ? ` (còn ${h}g${m}p)` : ` (còn ${h}g)`;
+        }
+        miniNext.textContent = `Tiếp: ${formatAlarmTime(alarm)}${labelPart}${etaPart}`;
+      }
+
+      // Render danh sách an toàn bằng textContent (không chèn chuỗi người dùng qua innerHTML)
+      function renderAlarms() {
+        alarmListEl.textContent = "";
+
+        alarms.forEach((alarm) => {
+          const item = document.createElement("div");
+          item.className = "alarm-item";
+          item.dataset.alarmId = alarm.id;
+
+          const info = document.createElement("div");
+          info.className = "alarm-info";
+
+          const timeEl = document.createElement("div");
+          timeEl.className = "alarm-time";
+          timeEl.textContent = formatAlarmTime(alarm);
+
+          const metaEl = document.createElement("div");
+          metaEl.className = "alarm-meta";
+          const parts = [];
+          if (alarm.label) parts.push(alarm.label);
+          parts.push(formatRepeatText(alarm.days));
+          parts.push(`Chuông #${alarm.ring + 1}`);
+          metaEl.textContent = parts.join(" • ");
+
+          info.appendChild(timeEl);
+          info.appendChild(metaEl);
+
+          const actions = document.createElement("div");
+          actions.className = "alarm-actions";
+
+          const toggleBtn = document.createElement("button");
+          toggleBtn.type = "button";
+          toggleBtn.className = "toggle-btn" + (alarm.enabled ? " on" : "");
+          toggleBtn.textContent = alarm.enabled ? "BẬT" : "TẮT";
+          toggleBtn.setAttribute("aria-pressed", String(alarm.enabled));
+          toggleBtn.addEventListener("click", () => {
+            alarm.enabled = !alarm.enabled;
+            saveAlarms();
+            renderAlarms();
+          });
+
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.className = "del-btn";
+          delBtn.textContent = "Xóa";
+          delBtn.addEventListener("click", () => {
+            if (activeRingingId === alarm.id) {
+              stopRingingBanner(true);
+            }
+            alarms = alarms.filter((x) => x.id !== alarm.id);
+            saveAlarms();
+            renderAlarms();
+          });
+
+          actions.appendChild(toggleBtn);
+          actions.appendChild(delBtn);
+
+          item.appendChild(info);
+          item.appendChild(actions);
+          alarmListEl.appendChild(item);
+        });
+
+        updateMiniNext(new Date());
+      }
+
+      addAlarmBtn.addEventListener("click", () => {
+        stopPreview();
+        const jsDays = Array.from(new Set(activeDayUi.map(uiIndexToJsDay)));
+        const currentH12 = getHour12From24(hour24);
+        const currentPeriod = getPeriodFrom24(hour24);
+        const newAlarm = normalizeAlarm({
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          hour12: currentH12,
+          minute: minuteVal,
+          period: currentPeriod,
+          hour24: hour24,
+          days: jsDays,
+          label: labelInput.value.trim(),
+          ring: clampInt(ringSelect.value, 0, TONE_PATTERNS.length - 1, 0),
+          enabled: true
+        }, 0);
+
+        if (newAlarm) {
+          alarms.unshift(newAlarm);
+          labelInput.value = "";
           saveAlarms();
           renderAlarms();
         }
-        activeRingingId = null;
-      }
-    });
+      });
 
-    function tickClock() {
-      const now = new Date();
-      const h24 = now.getHours();
-      const m = now.getMinutes();
-      const s = now.getSeconds();
-      const ap = h24 >= 12 ? "PM" : "AM";
-      const h12Now = h24 % 12 || 12;
+      function triggerAlarm(alarm, occurrenceKey) {
+        stopPreview();
+        if (occurrenceKey) {
+          triggeredOccurrenceSet.add(occurrenceKey);
+          if (triggeredOccurrenceSet.size > 500) {
+            const firstKey = triggeredOccurrenceSet.values().next().value;
+            triggeredOccurrenceSet.delete(firstKey);
+          }
+        }
 
-      miniClock.textContent = `${pad2(h12Now)}:${pad2(m)}:${pad2(s)} ${ap}`;
+        // Nếu đang có báo thức khác reo, dừng chuông cũ trước khi kích hoạt báo thức mới
+        stopRingingSoundAndTimers();
 
-      const viDays = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
-      dateText.textContent = `${viDays[now.getDay()]}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
+        activeRingingId = alarm.id;
+        ringingClock.textContent = formatAlarmTime(alarm);
+        ringingLabel.textContent = alarm.label || "Báo thức";
+        ringingBanner.classList.add("show");
 
-      const triggerKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${h24}-${m}`;
-      if (!activeRingingId && triggerKey !== lastTriggeredKey) {
-        const matched = alarms.find((a) => {
-          if (!a.enabled) return false;
-          const aH24 = typeof a.hour24 === "number" ? a.hour24 : to24Hour(a.hour12, a.period);
-          if (aH24 !== h24 || a.minute !== m) return false;
-          if (!a.days || a.days.length === 0) return true;
-          return a.days.includes(now.getDay());
-        });
-        if (matched) {
-          lastTriggeredKey = triggerKey;
-          triggerAlarm(matched);
+        playToneOnce(alarm.ring);
+        ringingIntervalId = setInterval(() => {
+          playToneOnce(alarm.ring);
+        }, 900);
+
+        if (navigator.vibrate) {
+          try {
+            navigator.vibrate([500, 300, 500, 300, 500]);
+          } catch (_) {}
         }
       }
-    }
 
-    loadAlarms();
-    renderPicker();
-    renderDays();
-    renderAlarms();
-    tickClock();
-    setInterval(tickClock, 1000);
+      function stopRingingBanner(skipOneTimeDisable) {
+        const currentId = activeRingingId;
+        activeRingingId = null;
+        ringingBanner.classList.remove("show");
+        stopRingingSoundAndTimers();
+
+        if (!skipOneTimeDisable && currentId) {
+          const target = alarms.find((x) => x.id === currentId);
+          if (target && (!Array.isArray(target.days) || target.days.length === 0)) {
+            target.enabled = false;
+            saveAlarms();
+            renderAlarms();
+          }
+        }
+      }
+
+      stopRingBtn.addEventListener("click", () => {
+        stopRingingBanner(false);
+      });
+
+      // Kiểm tra báo thức đến hạn dựa trên thời điểm hiện tại (không phụ thuộc tuyệt đối vào nhịp setInterval)
+      function checkDueAlarms(now) {
+        if (activeRingingId) return;
+
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const date = now.getDate();
+        const h24 = now.getHours();
+        const min = now.getMinutes();
+        const jsDay = now.getDay();
+
+        for (const alarm of alarms) {
+          if (!alarm.enabled) continue;
+          const aH24 = getAlarmHour24(alarm);
+          const aMin = clampInt(alarm.minute, 0, 59, 0);
+          if (aH24 !== h24 || aMin !== min) continue;
+
+          const days = Array.isArray(alarm.days) ? alarm.days : [];
+          const matchesDay = days.length === 0 || days.includes(jsDay);
+          if (!matchesDay) continue;
+
+          const occurrenceKey = `${alarm.id}|${year}-${month}-${date}|${h24}:${min}`;
+          if (triggeredOccurrenceSet.has(occurrenceKey)) continue;
+
+          triggerAlarm(alarm, occurrenceKey);
+          break;
+        }
+      }
+
+      function tickClock() {
+        const now = new Date();
+        const h24 = now.getHours();
+        const m = now.getMinutes();
+        const s = now.getSeconds();
+        const h12Now = getHour12From24(h24);
+        const ap = getPeriodFrom24(h24);
+
+        miniClock.textContent = `${pad2(h12Now)}:${pad2(m)}:${pad2(s)} ${ap}`;
+        dateText.textContent = `${VI_DAYS[now.getDay()]}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
+
+        checkDueAlarms(now);
+        updateMiniNext(now);
+      }
+
+      function startClockLoop() {
+        if (clockIntervalId !== null) {
+          clearInterval(clockIntervalId);
+          clockIntervalId = null;
+        }
+        tickClock();
+        clockIntervalId = setInterval(tickClock, 1000);
+      }
+
+      // Xử lý chuyển nền và quay lại trên Android/trình duyệt
+      function handleResumeFromBackground() {
+        startClockLoop();
+        if (activeRingingId && audioCtx && audioCtx.state === "suspended") {
+          ensureAudioReady().then(() => {
+            const ringingAlarm = alarms.find((a) => a.id === activeRingingId);
+            if (ringingAlarm && activeRingingId) {
+              playToneOnce(ringingAlarm.ring);
+            }
+          });
+        }
+      }
+
+      function handleEnterBackground() {
+        if (previewIntervalId !== null || previewAutoStopId !== null) {
+          stopPreview();
+        }
+      }
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+          handleEnterBackground();
+        } else {
+          handleResumeFromBackground();
+        }
+      });
+
+      window.addEventListener("pageshow", () => {
+        handleResumeFromBackground();
+      });
+
+      window.addEventListener("focus", () => {
+        handleResumeFromBackground();
+      });
+
+      window.addEventListener("beforeunload", () => {
+        if (clockIntervalId !== null) clearInterval(clockIntervalId);
+        stopPreviewTimersOnly();
+        stopRingingSoundAndTimers();
+      });
+
+      // Khởi tạo ứng dụng
+      loadAlarms();
+      renderPicker();
+      renderDays();
+      applyPanelCollapse();
+      renderAlarms();
+      startClockLoop();
+    })();
   </script>
 </body>
 </html>
